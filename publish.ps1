@@ -1,4 +1,4 @@
 & dotnet publish --output ./release -c Release .
 
-# Sagan.exe (total-items) (max-parallel) (data-szie-bytes)
-& ./release/Sagan.exe 100 5 1000
+# Sagan.exe (total-items) (max-parallel) (data-size-bytes)
+& ./release/Sagan.exe 10000 5 25000

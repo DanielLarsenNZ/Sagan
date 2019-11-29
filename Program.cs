@@ -126,7 +126,7 @@ namespace Sagan
 
                 foreach (var ex in exceptions) Console.WriteLine(ex.Message);
 
-                Console.WriteLine($"{totalItems} created in {stopwatch.Elapsed.TotalSeconds} seconds = {totalItems / stopwatch.Elapsed.TotalSeconds} TPS");
+                Console.WriteLine($"{charges.Count} documents created in {stopwatch.Elapsed.TotalSeconds} seconds = {totalItems / stopwatch.Elapsed.TotalSeconds} TPS");
                 Console.WriteLine($"Total request charge = {totalRequestCharge} = {totalRequestCharge / stopwatch.Elapsed.TotalSeconds} RU/s");
             }
         }
