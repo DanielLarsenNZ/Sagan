@@ -13,38 +13,43 @@ namespace Sagan
 {
     class Program
     {
+        const string CosmosConnectionStringKey = "Cosmos_ConnectionString";
+        const string CosmosDatabaseNameKey = "Cosmos_DatabaseName";
+        const string CosmosContainerNameKey = "Cosmos_ContainerName";
+        const string AppInsightsInstrumentationKey = "APPINSIGHTS_INSTRUMENTATIONKEY";
+
         static async Task Main(string[] args)
         {
             Console.WriteLine("Starting Sagan: Cosmos Pump");
+            Console.WriteLine("Usage: Sagan.exe (total-items) (max-parallel) (data-size-bytes)");
 
             // Defaults
             int totalItems = 1000;
             int maxParallel = 5;
             int dataSizeBytes = 23000;
 
-            if (args.Length == 3)int.TryParse(args[2], out dataSizeBytes);
+            if (args.Length == 3) int.TryParse(args[2], out dataSizeBytes);
             if (args.Length >= 2) int.TryParse(args[1], out maxParallel);
             if (args.Length >= 1) int.TryParse(args[0], out totalItems);
-            
+
             var now = DateTime.UtcNow;
 
             Console.WriteLine($"Sagan: {now}");
             Console.WriteLine($"Sagan: Total Items = {totalItems}");
-            Console.WriteLine($"Sagan: Total Items = {maxParallel}");
-            Console.WriteLine($"Sagan: Total Items = {dataSizeBytes}");
+            Console.WriteLine($"Sagan: Max degree of parallelism = {maxParallel}");
+            Console.WriteLine($"Sagan: Document data size (bytes) = {dataSizeBytes}");
 
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
-            var insights = InsightsHelper.InitializeTelemetryClient(
-                config //,
-                       //"Examples.Pipeline.ServiceBusReceiver",
-                       //$"cloudRoleInstance-{Environment.MachineName}"
-                );
+            CheckConfig(config);
 
+            var insights = InsightsHelper.InitializeTelemetryClient(config[AppInsightsInstrumentationKey]);
 
+            // Construct a random string of data
             string data = "";
             var random = new Random();
             for (int i = 0; i < dataSizeBytes; i++)
@@ -52,6 +57,7 @@ namespace Sagan
                 data += (char)random.Next(65, 90);
             }
 
+            // Load a list of Items
             var items = new List<Item>();
             for (int i = 1; i <= totalItems; i++)
             {
@@ -64,16 +70,19 @@ namespace Sagan
                 });
             }
 
-
-            using (var client = new CosmosClient(config["Cosmos:ConnectionString"]))
+            using (var client = new CosmosClient(config[CosmosConnectionStringKey]))
             {
-                var container = client.GetContainer(config["Cosmos:DatabaseName"], config["Cosmos:ContainerName"]);
+                var container = client.GetContainer(config[CosmosDatabaseNameKey], config[CosmosContainerNameKey]);
 
+                // Concurrent bags for recording charges and exceptions
                 var charges = new ConcurrentBag<double>();
                 var exceptions = new ConcurrentBag<Exception>();
+
                 var stopwatch = new Stopwatch();
                 stopwatch.Start();
+
                 await Task.WhenAll(
+                    // Partitioner splits items into n partitions where n = maxParallel
                     from partition in Partitioner.Create(items).GetPartitions(maxParallel)
                     select Task.Run(async delegate
                     {
@@ -87,6 +96,7 @@ namespace Sagan
                                 }
                                 catch (Exception ex)
                                 {
+                                    // log and continue
                                     insights.TrackException(ex);
                                     Console.Error.WriteLine(ex.Message);
                                     exceptions.Add(ex);
@@ -95,17 +105,18 @@ namespace Sagan
 
                                 charges.Add(response.RequestCharge);
                                 insights.TrackEvent(
-                                    "Sagan/CreateItem", 
-                                    metrics: new Dictionary<string, double> 
+                                    "Sagan/CreateItem",
+                                    metrics: new Dictionary<string, double>
                                     {
                                         {
                                             "RequestCharge", response.RequestCharge
-                                        } 
+                                        }
                                     });
-                                
+
                                 Console.WriteLine($"Item {partition.Current.ItemCount} request charge = {response.RequestCharge}");
                             }
                     }));
+
                 stopwatch.Stop();
 
                 double totalRequestCharge = charges.Sum();
@@ -118,6 +129,16 @@ namespace Sagan
                 Console.WriteLine($"{totalItems} created in {stopwatch.Elapsed.TotalSeconds} seconds = {totalItems / stopwatch.Elapsed.TotalSeconds} TPS");
                 Console.WriteLine($"Total request charge = {totalRequestCharge} = {totalRequestCharge / stopwatch.Elapsed.TotalSeconds} RU/s");
             }
+        }
+
+        private static void CheckConfig(IConfiguration config)
+        {
+            if (
+                string.IsNullOrEmpty(config[CosmosConnectionStringKey]) ||
+                string.IsNullOrEmpty(config[CosmosDatabaseNameKey]) ||
+                string.IsNullOrEmpty(config[CosmosContainerNameKey]) ||
+                string.IsNullOrEmpty(config[AppInsightsInstrumentationKey]))
+                throw new InvalidOperationException($"Expecting App settings or Env vars named {CosmosConnectionStringKey}, {CosmosDatabaseNameKey}, {CosmosContainerNameKey}, {AppInsightsInstrumentationKey}.");
         }
     }
 
