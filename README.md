@@ -21,7 +21,9 @@ A Cosmos DB pump. Pumping document particles into the Cosmos.
 Sagan will create `(total-items)` Documents of at least `(data-size-bytes)` each in Cosmos DB with
 `(max-parallel)` degree of parallelism. Once the run has completed a report will be generated with statistics.
 
-
+    Sagan: 29/11/2019 8:06:52 AM
+    10000 documents created in 331.0833854 seconds = 30.203871414201142 TPS
+    Total request charge = 129499.99999997957 = 391.1401348138431 RU/s
 
 ## App Settings
 
