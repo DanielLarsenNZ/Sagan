@@ -26,7 +26,7 @@ namespace Sagan
             // Defaults
             int totalItems = 1000;
             int maxParallel = 5;
-            int dataSizeBytes = 23000;
+            int dataSizeBytes = 25000;
 
             if (args.Length == 3) int.TryParse(args[2], out dataSizeBytes);
             if (args.Length >= 2) int.TryParse(args[1], out maxParallel);
