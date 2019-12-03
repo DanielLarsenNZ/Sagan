@@ -9,11 +9,11 @@ namespace Sagan
 {
     public static class InsightsHelper
     {
-        private readonly static TraceSource traceSource = new TraceSource("ConsoleApp5", SourceLevels.All);
+        //private readonly static TraceSource traceSource = new TraceSource("ConsoleApp5", SourceLevels.All);
 
         public static TelemetryClient InitializeTelemetryClient(string iKey)
         {
-            traceSource.Listeners.Add(new ApplicationInsightsTraceListener());
+            //traceSource.Listeners.Add(new ApplicationInsightsTraceListener());
 
             var telemetryConfig = TelemetryConfiguration.CreateDefault();
             telemetryConfig.InstrumentationKey = iKey;
