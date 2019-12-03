@@ -8,6 +8,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
 namespace Sagan
 {
@@ -16,6 +18,9 @@ namespace Sagan
         const string CosmosConnectionStringKey = "Cosmos_ConnectionString";
         const string CosmosDatabaseNameKey = "Cosmos_DatabaseName";
         const string CosmosContainerNameKey = "Cosmos_ContainerName";
+        const string CosmosServiceEndpointKey = "Cosmos_ServiceEndpoint";
+        const string CosmosAuthKeyKey = "Cosmos_AuthKey";
+
         const string AppInsightsInstrumentationKey = "APPINSIGHTS_INSTRUMENTATIONKEY";
 
         static async Task Main(string[] args)
@@ -70,10 +75,8 @@ namespace Sagan
                 });
             }
 
-            using (var client = new CosmosClient(config[CosmosConnectionStringKey]))
+            using (var client = new DocumentClient(new Uri(config[CosmosServiceEndpointKey]), config[CosmosAuthKeyKey]))
             {
-                var container = client.GetContainer(config[CosmosDatabaseNameKey], config[CosmosContainerNameKey]);
-
                 // Concurrent bags for recording charges and exceptions
                 var charges = new ConcurrentBag<double>();
                 var exceptions = new ConcurrentBag<Exception>();
@@ -89,10 +92,12 @@ namespace Sagan
                         using (partition)
                             while (partition.MoveNext())
                             {
-                                ItemResponse<Item> response = null;
+                                ResourceResponse<Document> response = null;
                                 try
                                 {
-                                    response = await container.CreateItemAsync(partition.Current);
+                                    response = await client.CreateDocumentAsync(
+                                        UriFactory.CreateDocumentCollectionUri(
+                                            config[CosmosDatabaseNameKey], config[CosmosContainerNameKey]), partition.Current);
                                 }
                                 catch (Exception ex)
                                 {
@@ -142,10 +147,8 @@ namespace Sagan
         }
     }
 
-    class Item
+    class Item : Resource
     {
-        [JsonProperty(PropertyName = "id")]
-        public string Id { get; set; }
         public string Data { get; set; }
         public int ItemCount { get; set; }
         public DateTime DateTime { get; set; }
