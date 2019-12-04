@@ -1,6 +1,6 @@
-﻿using Microsoft.Azure.Cosmos;
+﻿using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,8 +8,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
 
 namespace Sagan
 {
@@ -32,6 +30,7 @@ namespace Sagan
             int totalItems = 1000;
             int maxParallel = 20;
             int dataSizeBytes = 10;
+            int maxRetryAttempts = 9;
 
             if (args.Length == 3) int.TryParse(args[2], out dataSizeBytes);
             if (args.Length >= 2) int.TryParse(args[1], out maxParallel);
@@ -76,12 +75,18 @@ namespace Sagan
             }
 
             using (var client = new DocumentClient(
-                new Uri(config[CosmosServiceEndpointKey]), 
+                new Uri(config[CosmosServiceEndpointKey]),
                 config[CosmosAuthKeyKey],
-                new ConnectionPolicy { 
-                    ConnectionMode = ConnectionMode.Direct, 
-                    ConnectionProtocol = Protocol.Tcp, 
-                    MaxConnectionLimit = 1000 }))
+                new ConnectionPolicy
+                {
+                    ConnectionMode = ConnectionMode.Direct,
+                    ConnectionProtocol = Protocol.Tcp,
+                    MaxConnectionLimit = 1000,
+                    RetryOptions = new RetryOptions
+                    {
+                        MaxRetryAttemptsOnThrottledRequests = maxRetryAttempts
+                    }
+                }))
             {
                 // Concurrent bags for recording charges and exceptions
                 var charges = new ConcurrentBag<double>();
