@@ -1,4 +1,6 @@
-﻿using Microsoft.Azure.Cosmos;
+﻿using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using System;
@@ -73,12 +75,14 @@ namespace Sagan
             using (var client = new CosmosClient(config[CosmosConnectionStringKey]))
             {
                 var container = client.GetContainer(config[CosmosDatabaseNameKey], config[CosmosContainerNameKey]);
+                string dependencyTypeName = $"Microsoft.Azure.Cosmos ({config[CosmosDatabaseNameKey]}/{config[CosmosContainerNameKey]})";
 
                 // Concurrent bags for recording charges and exceptions
                 var charges = new ConcurrentBag<double>();
                 var exceptions = new ConcurrentBag<Exception>();
 
                 var stopwatch = new Stopwatch();
+                var cosmosStopwatch = new Stopwatch();
                 stopwatch.Start();
 
                 await Task.WhenAll(
@@ -89,31 +93,51 @@ namespace Sagan
                         using (partition)
                             while (partition.MoveNext())
                             {
-                                ItemResponse<Item> response = null;
-                                try
+                                using (insights.StartOperation<RequestTelemetry>("createitem"))
                                 {
-                                    response = await container.CreateItemAsync(partition.Current);
-                                }
-                                catch (Exception ex)
-                                {
-                                    // log and continue
-                                    insights.TrackException(ex);
-                                    Console.Error.WriteLine(ex.Message);
-                                    exceptions.Add(ex);
-                                    continue;
-                                }
 
-                                charges.Add(response.RequestCharge);
-                                insights.TrackEvent(
-                                    "Sagan/CreateItem",
-                                    metrics: new Dictionary<string, double>
+                                    ItemResponse<Item> response = null;
+                                    var startTime = DateTime.UtcNow;
+                                    bool success = false;
+                                    try
                                     {
-                                        {
-                                            "RequestCharge", response.RequestCharge
-                                        }
-                                    });
+                                        cosmosStopwatch.Reset();
+                                        cosmosStopwatch.Start();
+                                        response = await container.CreateItemAsync(partition.Current);
+                                        success = true;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // log and continue
+                                        insights.TrackException(ex);
+                                        Console.Error.WriteLine(ex.Message);
+                                        exceptions.Add(ex);
+                                        continue;
+                                    }
+                                    finally
+                                    {
+                                        cosmosStopwatch.Stop();
+                                        insights.TrackDependency(
+                                            dependencyTypeName,
+                                            "CreateItem",
+                                            $"CreateItemAsync id = {partition.Current.Id}, pk = {partition.Current.Id}",
+                                            startTime,
+                                            cosmosStopwatch.Elapsed,
+                                            success);
+                                    }
 
-                                Console.WriteLine($"Item {partition.Current.ItemCount} request charge = {response.RequestCharge}");
+                                    charges.Add(response.RequestCharge);
+                                    insights.TrackEvent(
+                                        "Sagan/CreateItem",
+                                        metrics: new Dictionary<string, double>
+                                        {
+                                            {
+                                                "RequestCharge", response.RequestCharge
+                                            }
+                                        });
+
+                                    Console.WriteLine($"Item {partition.Current.ItemCount} request charge = {response.RequestCharge}");
+                                }
                             }
                     }));
 
@@ -128,6 +152,11 @@ namespace Sagan
 
                 Console.WriteLine($"{charges.Count} documents created in {stopwatch.Elapsed.TotalSeconds} seconds = {totalItems / stopwatch.Elapsed.TotalSeconds} TPS");
                 Console.WriteLine($"Total request charge = {totalRequestCharge} = {totalRequestCharge / stopwatch.Elapsed.TotalSeconds} RU/s");
+                Console.WriteLine($"Exceptions: {exceptions.Count}");
+                Console.WriteLine("Quitting in 5 seconds...");
+                // Flush insights and wait before closing
+                insights.Flush();
+                Task.Delay(5000).Wait();
             }
         }
 

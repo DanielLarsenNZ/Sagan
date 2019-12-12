@@ -1,7 +1,9 @@
 ﻿using Microsoft.ApplicationInsights;
 //using Microsoft.ApplicationInsights.DependencyCollector;
 using Microsoft.ApplicationInsights.Extensibility;
-using Microsoft.ApplicationInsights.TraceListener;
+using Microsoft.Extensions.DependencyInjection;
+using System;
+//using Microsoft.ApplicationInsights.TraceListener;
 //using Microsoft.ApplicationInsights.Extensibility.PerfCounterCollector.QuickPulse;
 using System.Diagnostics;
 
@@ -13,6 +15,31 @@ namespace Sagan
 
         public static TelemetryClient InitializeTelemetryClient(string iKey)
         {
+            // Create the DI container.
+            IServiceCollection services = new ServiceCollection();
+
+            // Being a regular console app, there is no appsettings.json or configuration providers enabled by default.
+            // Hence instrumentation key must be specified here.
+            services.AddApplicationInsightsTelemetryWorkerService(iKey);
+
+            // Build ServiceProvider.
+            IServiceProvider serviceProvider = services.BuildServiceProvider();
+
+            // Obtain logger instance from DI.
+            //ILogger<Program> logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
+            // Obtain TelemetryClient instance from DI, for additional manual tracking or to flush.
+            return serviceProvider.GetRequiredService<TelemetryClient>();
+
+
+
+
+
+
+
+
+            /*
+
             //traceSource.Listeners.Add(new ApplicationInsightsTraceListener());
 
             var telemetryConfig = TelemetryConfiguration.CreateDefault();
@@ -43,6 +70,8 @@ namespace Sagan
             //insights.Context.Cloud.RoleInstance = cloudRoleInstance;
 
             return insights;
+
+            */
         }
     }
 }
