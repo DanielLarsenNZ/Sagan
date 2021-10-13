@@ -1,6 +1,6 @@
 # Sagan
 
-A Cosmos DB pump. Pumping document particles into the Cosmos.
+A Cosmos DB pump. Pumping [billions and billions](https://en.wikipedia.org/wiki/Carl_Sagan#%22Billions_and_billions%22) of document particles into the Cosmos.
 
 ## Prequisites
 
